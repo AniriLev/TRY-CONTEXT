@@ -1,0 +1,271 @@
+import random
+import spacy
+from difflib import SequenceMatcher
+
+def main():
+
+    print("Hi! I know the best way to learn new words and it is CONTEXT. So try me and check how well you can understand your newly learned words! " \
+        "I will make one sentence and one question and your goal is to analyze the sentence and answer the question to check if you understood the CONTEXT. " \
+        "Let's start!\n")
+
+    items = words()
+    sentence = generate_sentence(items)
+    sen = check_sentence(sentence)
+    print(f"\nNow let's see what we have: {sen}.")
+
+    qus, ans_itms = generate_questions(sen)
+
+    print("Try to answer this question: ", qus)
+    ans = check_answers(sen, qus, ans_itms)
+    print(ans)
+    if ans == "Correct":
+        print("Nice! Found a new word? Welcome to try more!")
+    else:
+        print("Don't worry! You are always welcome to try more!")
+
+def words():
+
+    #check for not isdigit()
+    nouns = [w.strip() for w in input("Enter 2 nouns (Ex: fish, cat): ").lower().split(",") if w.strip()]
+    if "".join(nouns) == "" or not "".join(nouns).isalpha():
+        nouns = ["fish", "cat"]
+        print('Since you gave me no words here, I will use "fish" and "cat".')
+    elif len(nouns) == 1:
+        nouns = ["".join(nouns), "cat"]
+        print('Since you gave me only one word here, I will use "cat" too.')
+
+    transitive_verbs = input("Enter 2 transitive verbs (Ex: eat, teach): ").lower().split(",")
+    if "".join(transitive_verbs) == "" or not "".join(nouns).isalpha():
+        transitive_verbs = ["eat"]
+        print('Since you gave me no words here, I will use "eat".')
+
+    intransitive_verbs = input("Enter 2 intransitive verbs (Ex: sleep): ").lower().split(",")
+    if "".join(intransitive_verbs) == "" or not "".join(nouns).isalpha():
+        intransitive_verbs = [ "sleep"]
+        print('Since you gave me no words here, I will use "sleep".')
+
+    adjectives = input("Enter 2 adjectives (Ex: good): ").lower().split(",")
+    if "".join(adjectives) == "" or not "".join(nouns).isalpha():
+        adjectives = ["good"]
+        print('Since you gave me no words here, I will use "good".')
+
+    places = input("Enter 2 places (Ex: at home): ").lower().split(",")
+    if "".join(places) == "" or not "".join(nouns).isalpha():
+        places = ["at home"]
+        print('Since you gave me no words here, I will use "at home".')
+
+    times = input("Enter 2 times (Ex: in the morning): ").lower().split(",")
+    if "".join(times) == "" or not "".join(nouns).isalpha():
+        times = ["at night"]
+        print('Since you gave me no words here, I will use "at night".')
+    elif "".join(times) in ("at weekends", "weekends"):
+        times = ["at weekend"]
+
+    items = {"nouns":nouns, "transitive_verbs": transitive_verbs, "intransitive_verbs": intransitive_verbs, "adjectives": adjectives, "places": places, "times": times}
+
+    return items
+
+def generate_sentence(used_words):
+
+    sen_structure = ["adjectives nouns transitive_verbs nouns places times", "adjectives nouns intransitive_verbs places times", "nouns nouns intransitive_verbs places times"]
+    structure = random.choice(sen_structure).split(" ")
+
+    sentence_list = []
+
+    for part_of_speach in structure:
+        word = used_words[part_of_speach].pop(random.randrange(len(used_words[part_of_speach])))
+        sentence_list.append((word, part_of_speach))
+
+    return sentence_list
+
+def check_sentence(sentence):
+    pronouns = ["he", "she", "i", "it", "you", "we", "they"]
+    pos_pronouns = {"he":"his", "she":"her", "i":"my", "it":"its", "you":"your", "we":"our", "they":"their"}
+    obj_pronouns = {"he":"him", "she":"her", "i":"me", "it":"it", "you":"you", "we":"us", "they":"them"}
+
+    new_sentence = []
+
+    for i, (word, part) in enumerate(sentence):
+        prev = sentence[i-1] if i > 0 else (None, None)
+        nxt  = sentence[i+1] if i+1 < len(sentence) else (None, None)
+        prev_word, prev_part = prev
+        next_word, next_part = nxt
+
+        # 1. Артикли и притяжательные местоимения
+        if word not in pronouns:
+            if part == "adjectives" and next_part == "nouns" and next_word not in pronouns:
+                new_sentence.append("the")
+            elif part == "nouns" and next_part == "nouns" and not word.endswith("s"):
+                new_sentence.append("the")
+                word += "'s"
+            elif part == "nouns" and next_part == "nouns" and word.endswith("s"):
+                new_sentence.append("the")
+                word += "'"
+            elif part == "nouns" and prev_part not in ["adjectives", "nouns"] and next_part != "nouns":
+                new_sentence.append("the")
+        else:
+            if next_part == "nouns" and next_word not in pronouns:
+                word = pos_pronouns[word]
+
+        # 2. Объектные местоимения (he -> him)
+        if word in pronouns and prev_part in ["intransitive_verbs", "transitive_verbs"]:
+            word = obj_pronouns[word]
+
+        # 3. Согласование подлежащего и сказуемого
+        if part in ["intransitive_verbs", "transitive_verbs"] and prev_part == "nouns":
+            if word == "be":
+                if prev_word == "i":
+                    word = "am"
+                elif prev_word.endswith("s"):
+                    word = "are"
+                else:
+                    word = "is"
+            elif (prev_word not in ["i", "you", "they", "we"] and not prev_word.endswith("s")) or prev_word in ["he", "she", "it"] :
+                if word.endswith(("s", "sh", "ch", "x", "o", "z")):
+                    word += "es"
+                elif word.endswith("y") and word[-2] not in "aeuio":
+                    word = word[:-1] + "ies"
+                else:
+                    word += "s"
+
+        # 4. Пропуск прилагательного перед местоимением
+        if part == "adjectives" and next_word in pronouns:
+            if new_sentence and new_sentence[-1] == "the":
+                new_sentence.pop()
+            continue
+
+        new_sentence.append(word)
+
+    return " ".join(new_sentence).capitalize()
+
+#Sentences are ready, now it is time for questions
+nlp = spacy.load("en_core_web_sm")
+
+def generate_questions(sentence):
+
+
+    doc = nlp(sentence)
+
+    doc_list = []
+    for token in doc:
+        doc_list.append((token.text, token.dep_, token.head.text, token.ent_type_))
+
+
+    sp_parts = ["poss", "nsubj", "ROOT", "dobj", "place", "time"]
+    sec_prep = {}
+
+    for word, part, link, add in doc_list:
+        if part in sp_parts:
+            sec_prep[part] = word
+
+        if add in ["DATE", "TIME"]:
+            sec_prep["time"] = f"{link} {word}"
+
+        if add == '' and part == "pobj":
+            sec_prep["place"] = f"{link} {word}"
+
+    nsubj = sec_prep['nsubj']
+    root = sec_prep['ROOT']
+    time = sec_prep.get('time', 'at night')
+    place = sec_prep.get('place', 'at home')
+
+    question_type_do = [f"Who {root} {time}?",
+                        f"Where does {nsubj} {root} {time}?",
+                        f"When does {nsubj} {root} {place}?",
+                        f"What does {nsubj} do {place} {time}?"]
+    question_type_be = [f"Who is {place} {time}?",
+                        f"Where {root} {nsubj} {time}?"]
+
+    question = []
+    if root in ["am", "is", "are"]:
+        type = random.choice(question_type_be)
+        t_type = type.lower().split(" ")
+        for word in t_type:
+            question.append(word)
+
+    else:
+        type = random.choice(question_type_do)
+        t_type = type.lower().split(" ")
+        for word in t_type:
+            if word == "does":
+                if (nsubj.lower() in ["i", "they", "we", "you"] or nsubj.lower()[-1] == "s"):
+                    question.append("do")
+                else:
+                    question.append("does")
+
+            elif word == root and ("does" in question or "do" in question):
+                if root.endswith(("ses", "shes", "ches", "xes", "oes", "zes", "ies", "s")):
+                    if root.endswith(("ses", "shes", "ches", "xes", "oes", "zes")):
+                        question.append(root[:-2])
+
+                    elif root.endswith("ies"):
+                        question.append(root[:-3] + "y")
+
+                    elif root.endswith("s"):
+                        question.append(root[:-1])
+                else:
+                    question.append(word)
+
+            elif word == root and "who" in t_type  and ("does" not in question or "do" not in question):
+                if root.endswith(("ses", "shes", "ches", "xes", "oes", "zes", "ies", "s")):
+                    question.append(root)
+                else:
+                    if root.endswith(("s", "sh", "ch", "x", "o", "z")):
+                        question.append(root + "es")
+
+                    elif root.endswith("y") and root[-2] not in "aeuio":
+                        question.append(root[:-1] + "ies")
+
+                    else:
+                        question.append(root + "s")
+
+            else:
+                question.append(word)
+
+    give = " ".join(question).capitalize()
+    return give.replace(" i ", " I "), sec_prep
+
+
+def check_answers(sentence, question, words):
+
+    question = question.lower()
+    sentence = sentence.lower()
+
+    sub_only = f"{words['nsubj']}"
+    time_only = f"{words['time']}"
+    verb_only = f"{words['ROOT']}"
+    place_only = f"{words['place']}"
+    sub_verb = f"{words['nsubj']} {words['ROOT']}"
+    sub_verb_time = f"{words['nsubj']} {words['ROOT']} {words['time']}"
+    sub_verb_place = f"{words['nsubj']} {words['ROOT']} {words['place']}"
+
+    answer_rules = {
+    "who":   {"correct": sub_only.lower(), "fallback": sub_verb_time, "threshold": 0.1},
+    "when":  {"correct": time_only, "fallback": sub_verb_time, "threshold": 0.3},
+    "what":  {"correct": verb_only, "fallback": sub_verb, "threshold": 0.3},
+    "where": {"correct": place_only, "fallback": sub_verb_place, "threshold": 0.3},
+    }
+
+    i = 0
+    while i < 3:
+
+        us_answer = input("Put your answer here: ")
+        us_answer = us_answer.lower()
+        sim = SequenceMatcher(None, sentence, us_answer).ratio()
+
+        for q_word, q_dict in answer_rules.items():
+            if q_word in question:
+                if q_dict['correct'] in us_answer:
+                    if us_answer == q_dict['correct'] or sim >= q_dict['threshold']:
+                        return "Correct"
+                else:
+
+                    i += 1
+                    if i < 3:
+                        print("Not really, so try again")
+                    else:
+                        return (f'Sorry, but it is "{q_dict['fallback'].capitalize()}".')
+
+
+if __name__=="__main__":
+    main()
